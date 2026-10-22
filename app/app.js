@@ -16,7 +16,7 @@ import { analyticsActionQuestionIds, analyticsMetadataCapabilities, analyticsPla
 import { runTaxonomyDomRegression } from './taxonomy-dom-regression.js?v=20260902-canonical-subject';
 
 const root = document.querySelector('#app');
-const TARGET_SECONDS = 50;
+const TARGET_SECONDS = 60;
 const PAGE_SIZE = 500;
 const RECALL_BATCH_SIZE = 20;
 const metadataRequests = new Map();
@@ -673,6 +673,7 @@ async function loadPersonalState(questionIds) {
 
 async function startPendingSession(isCurrent = () => true) {
   const questionSet = state.pendingSet; if (!questionSet) return;
+  { const qbMode = window.__qbankMode; window.__qbankMode = null; if ((qbMode === 'practice' || qbMode === 'test') && questionSet.mode !== 'recall') { questionSet.mode = qbMode; questionSet.autoSubmit = qbMode === 'test'; } } /*qb-custom*/
   const sessionUser=state.user?.id;
   const { mode, preset, title, filters, autoSubmit, questions } = questionSet;
   const startedMs = Date.now();
@@ -704,7 +705,7 @@ async function startPendingSession(isCurrent = () => true) {
     ...payload, ...(session || {}), kind: mode, questions, index: 0, answers: {}, solvingVisible: true,
     bookmarks: personal.bookmarks, marked: personal.marked, learning: personal.learning,
     questionStartedAt: Date.now(), questionTimeRemainingSeconds: null,
-    explanationOpen: false, completedReview: false,
+    explanationOpen: mode === 'practice', completedReview: false,
   };
   state.pendingSet = null;
   if (preset === 'smart-recall' || preset === 'active-recall-v2') {
@@ -991,7 +992,7 @@ function renderActive() {
   const active = state.active; const question = activeQuestion(); if (!active || !question || active.solvingVisible === false) return;
   const reviewVisible=active.completedReview?new Set(reviewPositions(active)):null;
   if (question.restoreMedia && !question.mediaLoading && !question.mediaError) void recoverSnapshotMedia(active, question);
-  const answer = active.answers[question.id]; const reveal = active.completedReview || ['practice', 'recall'].includes(active.kind) && Boolean(answer?.selected_option) && (correctKeys(question).length === 1 || answer.submitted);
+  const answer = active.answers[question.id]; const reveal = active.completedReview || answer?.timeout_reveal || ['practice', 'recall'].includes(active.kind) && Boolean(answer?.selected_option) && (correctKeys(question).length === 1 || answer.submitted);
   const answered = Object.values(active.answers).filter((item) => item?.selected_option).length;
   const browsing = active.kind === 'browse';
   const learning = active.learning.get(question.id) || {};
@@ -999,7 +1000,7 @@ function renderActive() {
     ? `<button class="button ghost active-control" data-action="srm-remove">In Recall</button>${active.preset==='active-recall-v2'?'':'<button class="button ghost" data-action="srm-reset">Reset Recall</button>'}`
     : '<button class="button ghost" data-action="srm-add">Add to Recall</button>';
   const timerRunning = !browsing && (active.kind !== 'recall' || active.target_seconds_per_question !== 0) && !active.completedReview && active.status === 'in_progress';
-  const timerShouldTick = timerRunning && !answer?.selected_option && active.questionTimeRemainingSeconds !== 0;
+  const timerShouldTick = timerRunning && (active.kind === 'test' || (!answer?.selected_option && !answer?.timeout_reveal && active.questionTimeRemainingSeconds !== 0));
   const palette = active.questions.slice(0, 500).map((item, index) => {
     if(reviewVisible&&!reviewVisible.has(index))return ''; 
     const itemAnswer = active.answers[item.id]; const selected = Boolean(itemAnswer?.selected_option);
@@ -1012,7 +1013,7 @@ function renderActive() {
   }).join('');
   const smartReason=recallConcept(active,question.id);
   const tools = browsing ? '' : `<section class="card question-tools"><span class="eyebrow">QUESTION TOOLS</span><button class="tool-button bookmark-tool ${active.bookmarks.has(question.id) ? 'active' : ''}" data-action="bookmark" aria-pressed="${active.bookmarks.has(question.id)}"><span>${active.bookmarks.has(question.id) ? '★' : '☆'}</span>${active.bookmarks.has(question.id) ? 'Bookmarked' : 'Bookmark'}</button><button class="tool-button review-tool ${active.marked.has(question.id) ? 'active' : ''}" data-action="mark" aria-pressed="${active.marked.has(question.id)}"><span>!</span>${active.marked.has(question.id) ? 'Marked for review' : 'Mark for review'}</button>${active.completedReview?'':srmButton}<button class="tool-button" data-action="note"><span>＋</span>Note</button><button class="tool-button" data-action="report"><span>⚑</span>Report</button></section>`;
-  layout(`<section class="question-header ${active.preset==='active-recall-v2'?'active-recall-session':''}"><div><span class="pill">${browsing ? 'Browse' : active.completedReview ? 'Review' : active.kind === 'recall' ? 'Recall' : active.kind === 'test' ? e(TEST_PRESETS[active.preset]?.[0] || 'Test') : 'Practice'}</span><h1>${e(!reveal&&isRecallSelection(active)?'Recall practice':active.title || 'Question set')}</h1></div>${browsing ? `<div class="row"><button class="button" data-action="preview-browsed-set">Start test with these exact questions</button><button class="button secondary" data-action="back-to-origin">Back</button></div>` : active.kind === 'recall' ? `<div class="timer-cluster">${recallTimerSetting(active.target_seconds_per_question ?? 50)}${timerRunning ? '<div><span>QUESTION TIMER</span><b id="question-timer"></b><span id="recall-timeout" role="status"></span></div>' : ''}<a class="button secondary" href="#/recall" data-action="exit-recall">Exit Recall</a></div>` : timerRunning ? `<div class="timer-cluster"><div><span>QUESTION TIMER</span><b id="question-timer">00:50</b></div><div><span>TOTAL TIMER</span><b id="total-timer">${timerText(active.questions.length * TARGET_SECONDS)}</b></div><button class="button secondary compact" data-action="toggle-timers" ${answer?.selected_option||active.timerBusy?'disabled':''}>${sharedClock(active).manualPaused?'Resume':'Pause'}</button>${sharedClock(active).paused?'<span class="pill">PAUSED</span>':''}</div>` : ''}</section><div class="question-layout ${active.preset==='active-recall-v2'?'active-recall-session':''}"><section class="card question-card"><div class="question-topline"><span>Question ${active.index + 1} of ${active.questions.length}</span><span class="question-context">${questionMeta(question)}</span></div><div class="progress"><i style="width:${((active.index + 1) / active.questions.length) * 100}%"></i></div>${smartReason&&!active.completedReview?`<p class="smart-recall-reason">${e(safeRecallMetadata(smartReason))}</p><details class="smart-recall-why"><summary>Why this question?</summary><ul>${[...new Set([safeRecallMetadata(smartReason),...(smartReason.reasons||[])])].map(reason=>`<li>${e(reason)}</li>`).join('')}</ul></details>`:''}${question.mediaLoading ? '<p role="status" class="subtle">Loading original media…</p>' : question.mediaError ? '<p class="media-unavailable">Could not load original media. <button class="button ghost compact" data-action="retry-media">Retry images</button></p>' : ''}${active.completedReview&&active.kind!=='browse'?`<div class="row review-status-filters">${['all','incorrect','correct','unattempted'].map(f=>`<button class="button secondary compact" data-action="review-filter" data-value="${f}" aria-pressed="${(active.reviewFilter||'all')===f}">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div><p class="pill">${!answer?.selected_option?'Unattempted':isAnswerCorrect(question,answer)?'Correct':'Incorrect'} · Selected: ${e(answer?.selected_option||'—')} · Correct: ${e(correctKeys(question).join(', '))}</p>`:''}${renderQuestion(question, answer, reveal)}${!reveal&&active.preset==='active-recall-v2'&&activeRecallUnit()?.primary_concept&&active.arOptionsFor!==question.id?'<div class="recall-retrieve-prompt"><p>Retrieve the diagnosis, mechanism or next step before looking at the choices.</p><textarea aria-label="Your retrieval" placeholder="Recall it in your own words (optional; not saved)"></textarea><button class="button" data-action="ar-options">Show answer choices</button></div>':''}${browsing ? '' : feedbackControls(answer || {}, reveal, Boolean(answer?.selected_option) && !isAnswerCorrect(question, answer))}<div class="question-actions"><button class="button secondary" data-action="previous" ${active.index === 0 ? 'disabled' : ''}>← Previous</button><button class="button" data-action="next">${active.index === active.questions.length - 1 ? (browsing ? 'Back' : active.completedReview ? 'Back to results' : 'Finish') : 'Next →'}</button></div></section><aside class="question-sidebar">${tools}<section class="card palette-card"><div class="section-heading"><div><span class="eyebrow">NAVIGATOR</span><h3>Questions</h3></div><span>${answered}/${active.questions.length}</span></div><div class="status-legend" aria-label="Question status legend"><span class="correct">Correct</span><span class="incorrect">Incorrect</span><span class="review">Review</span><span class="bookmark">Bookmarked</span><span class="unattempted">Unattempted</span></div><div class="palette">${palette}</div>${active.questions.length > 500 ? '<p class="subtle">Palette shows the first 500 positions; Previous/Next continues through all questions.</p>' : ''}${active.kind === 'test' && !active.completedReview ? `<p class="subtle">${active.questions.length - answered} unanswered</p><button class="button danger full" data-action="submit">Submit test</button>` : ''}</section></aside></div>`);
+  layout(`<section class="question-header ${active.preset==='active-recall-v2'?'active-recall-session':''}"><div><span class="pill">${browsing ? 'Browse' : active.completedReview ? 'Review' : active.kind === 'recall' ? 'Recall' : active.kind === 'test' ? e(TEST_PRESETS[active.preset]?.[0] || 'Test') : 'Practice'}</span><h1>${e(!reveal&&isRecallSelection(active)?'Recall practice':active.title || 'Question set')}</h1></div>${browsing ? `<div class="row"><button class="button" data-action="preview-browsed-set">Start test with these exact questions</button><button class="button secondary" data-action="back-to-origin">Back</button></div>` : active.kind === 'recall' ? `<div class="timer-cluster">${recallTimerSetting(active.target_seconds_per_question ?? 50)}${timerRunning ? '<div><span>QUESTION TIMER</span><b id="question-timer"></b><span id="recall-timeout" role="status"></span></div>' : ''}<a class="button secondary" href="#/recall" data-action="exit-recall">Exit Recall</a></div>` : timerRunning ? `<div class="timer-cluster"><div><span>QUESTION TIMER</span><b id="question-timer">00:50</b></div><div><span>TOTAL TIMER</span><b id="total-timer">${timerText(active.questions.length * TARGET_SECONDS)}</b></div><button class="button secondary compact" data-action="toggle-timers" ${answer?.selected_option||active.timerBusy?'disabled':''}>${sharedClock(active).manualPaused?'Resume':'Pause'}</button>${sharedClock(active).paused?'<span class="pill">PAUSED</span>':''}</div>` : ''}</section><div class="question-layout ${active.preset==='active-recall-v2'?'active-recall-session':''}"><section class="card question-card"><div class="question-topline"><span>Question ${active.index + 1} of ${active.questions.length}</span><span class="question-context">${questionMeta(question)}</span></div><div class="progress" data-qb-kind="${active.kind}" data-qb-reveal="${reveal ? 1 : 0}" data-qb-timeout="${answer?.timeout_reveal ? 1 : 0}"><i style="width:${((active.index + 1) / active.questions.length) * 100}%"></i></div>${smartReason&&!active.completedReview?`<p class="smart-recall-reason">${e(safeRecallMetadata(smartReason))}</p><details class="smart-recall-why"><summary>Why this question?</summary><ul>${[...new Set([safeRecallMetadata(smartReason),...(smartReason.reasons||[])])].map(reason=>`<li>${e(reason)}</li>`).join('')}</ul></details>`:''}${question.mediaLoading ? '<p role="status" class="subtle">Loading original media…</p>' : question.mediaError ? '<p class="media-unavailable">Could not load original media. <button class="button ghost compact" data-action="retry-media">Retry images</button></p>' : ''}${active.completedReview&&active.kind!=='browse'?`<div class="row review-status-filters">${['all','incorrect','correct','unattempted'].map(f=>`<button class="button secondary compact" data-action="review-filter" data-value="${f}" aria-pressed="${(active.reviewFilter||'all')===f}">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div><p class="pill">${!answer?.selected_option?'Unattempted':isAnswerCorrect(question,answer)?'Correct':'Incorrect'} · Selected: ${e(answer?.selected_option||'—')} · Correct: ${e(correctKeys(question).join(', '))}</p>`:''}${renderQuestion(question, answer, reveal)}${!reveal&&active.preset==='active-recall-v2'&&activeRecallUnit()?.primary_concept&&active.arOptionsFor!==question.id?'<div class="recall-retrieve-prompt"><p>Retrieve the diagnosis, mechanism or next step before looking at the choices.</p><textarea aria-label="Your retrieval" placeholder="Recall it in your own words (optional; not saved)"></textarea><button class="button" data-action="ar-options">Show answer choices</button></div>':''}${browsing ? '' : feedbackControls(answer || {}, reveal, Boolean(answer?.selected_option) && !isAnswerCorrect(question, answer))}<div class="question-actions"><button class="button secondary" data-action="previous" ${active.index === 0 ? 'disabled' : ''}>← Previous</button><button class="button" data-action="next">${active.index === active.questions.length - 1 ? (browsing ? 'Back' : active.completedReview ? 'Back to results' : 'Finish') : 'Next →'}</button></div></section><aside class="question-sidebar">${tools}<section class="card palette-card"><div class="section-heading"><div><span class="eyebrow">NAVIGATOR</span><h3>Questions</h3></div><span>${answered}/${active.questions.length}</span></div><div class="status-legend" aria-label="Question status legend"><span class="correct">Correct</span><span class="incorrect">Incorrect</span><span class="review">Review</span><span class="bookmark">Bookmarked</span><span class="unattempted">Unattempted</span></div><div class="palette">${palette}</div>${active.questions.length > 500 ? '<p class="subtle">Palette shows the first 500 positions; Previous/Next continues through all questions.</p>' : ''}${active.kind === 'test' && !active.completedReview ? `<p class="subtle">${active.questions.length - answered} unanswered</p><button class="button danger full" data-action="submit">Submit test</button>` : ''}</section></aside></div>`);
   if(!reveal&&active.preset==='active-recall-v2'&&activeRecallUnit()?.primary_concept&&active.arOptionsFor!==question.id){document.querySelectorAll('[data-action=answer],[data-action=submit-multi-answer]').forEach(el=>el.hidden=true);}
   if (timerRunning) updateActiveTimerDisplay();
   bindCerebellumMedia(question, root, () => !reveal && !sharedClock(active).manualPaused);
@@ -1026,7 +1027,7 @@ function stopActiveTimer() {
 }
 
 function totalTimerLimit(active) { return active.kind === 'recall' ? Infinity : active.questions.length * TARGET_SECONDS * 1000; }
-function questionTimerLimit(active) { return active.kind === 'recall' ? (active.target_seconds_per_question === 0 ? Infinity : (active.target_seconds_per_question ?? 50) * 1000) : 50000; }
+function questionTimerLimit(active) { return active.kind === 'recall' ? (active.target_seconds_per_question === 0 ? Infinity : (active.target_seconds_per_question ?? 50) * 1000) : TARGET_SECONDS * 1000; }
 function sharedClock(active) {
  if (!active.timer_state) active.timer_state=initialClock(active.index,active.questionStartedAt||Date.now());
  if (active.kind === 'recall') active.timer_state.questionLimitMs = questionTimerLimit(active);
@@ -1074,6 +1075,7 @@ function startActiveTimers(){
   if(Date.now()-lastCloud>=15000){lastCloud=Date.now();persistTimer(active);}
   if(sharedClock(active).paused){stopActiveTimer();if(!wasPaused)persistTimer(active);}
   if(totalTimeRemaining(active)===0&&active.kind==='test'&&active.auto_submit)submitActive(true);
+  if(active.kind==='practice'&&questionTimeRemaining(active)===0){const q=activeQuestion(),a=active.answers[q?.id];const done=a?.selected_option&&(a.submitted||correctKeys(q).length===1);if(q&&!done&&!a?.timeout_reveal){active.answers[q.id]={...(a||{}),selected_option:a?.selected_option||'',submitted:Boolean(a?.selected_option),timeout_reveal:true,time_spent_seconds:TARGET_SECONDS};active.explanationOpen=true;pauseAttemptTimers(active);renderActive();return;}} /*qb-custom*/
  };
  tick();if(!sharedClock(active).paused)state.timer=setInterval(tick,250);
 }
@@ -1143,7 +1145,7 @@ async function selectAnswer(key) {
   const selection = new Set(selectedKeys(existing));
   if (multiple) { if (selection.has(key)) selection.delete(key); else selection.add(key); }
   const selectedOption = multiple ? [...selection].sort().join(',') : key;
-  if (selectedOption && !existing?.selected_option) pauseAttemptTimers(active, selectedAt);
+  if (selectedOption && !existing?.selected_option && active.kind !== 'test') pauseAttemptTimers(active, selectedAt);
   if (!selectedOption && existing?.selected_option) {
     const remaining = questionTimeRemaining(active, existing, selectedAt);
     active.questionTimeRemainingSeconds = null;
@@ -1153,7 +1155,7 @@ async function selectAnswer(key) {
   const answer = { ...(existing || {}), client_event_id: existing?.client_event_id || crypto.randomUUID(), selected_option: selectedOption, answered_at: new Date(selectedAt).toISOString(), time_spent_seconds: existing?.selected_option ? existing.time_spent_seconds : elapsedOnQuestion(selectedAt), question_time_remaining_seconds: selectedOption ? questionTimeRemaining(active, null, selectedAt) : null };
   active.answers[question.id] = answer;
   const answerRoute = location.hash;
-  active.explanationOpen = false;
+  active.explanationOpen = active.kind === 'practice';
   // Answer feedback is local; persistence must not delay the selected/correct state.
   renderActive();
   if (['practice', 'recall'].includes(active.kind) && !multiple && !existing?.selected_option && !isAnswerCorrect(question, answer) && active.preset !== 'active-recall-v2') await recordAttempt(question, answer);
@@ -1165,7 +1167,7 @@ async function submitMultiAnswer() {
   const question = activeQuestion(); const answer = state.active?.answers?.[question?.id];
   if (!question || !answer?.selected_option || !['practice', 'recall'].includes(state.active.kind)) return;
   const active = state.active, answerRoute = location.hash;
-  answer.submitted = true; active.explanationOpen = false; renderActive();
+  answer.submitted = true; active.explanationOpen = active.kind === 'practice'; renderActive();
   if (!isAnswerCorrect(question, answer) && active.preset !== 'active-recall-v2') await recordAttempt(question, answer);
   await saveActiveAnswer(question.id);
   if (state.active === active && activeQuestion()?.id === question.id && location.hash === answerRoute) renderActive();
@@ -1194,8 +1196,8 @@ async function navigateActive(index) {
   const destinationAnswer = active.answers[active.questions[active.index]?.id];
   active.questionTimeRemainingSeconds = destinationAnswer?.selected_option ? answeredQuestionTimeRemaining(destinationAnswer) : null;
   if(active.kind!=='browse'){active.timer_state={...sharedClock(active),position:active.index,questionUsedMs:destinationAnswer?.selected_option?(active.kind === 'recall' ? Number(destinationAnswer.time_spent_seconds || 0) : TARGET_SECONDS-answeredQuestionTimeRemaining(destinationAnswer))*1000:0,paused:true};}
-  if (active.kind !== 'browse' && !destinationAnswer?.selected_option) resumeTotalTimer(active, active.questionStartedAt);
-  active.explanationOpen = false;
+  if (active.kind !== 'browse' && (active.kind === 'test' || !destinationAnswer?.selected_option)) resumeTotalTimer(active, active.questionStartedAt);
+  active.explanationOpen = active.kind === 'practice';
   await persistTimer(active);
   if (state.active === active && state.route === originalRoute) renderActive();
   if (active.id) await optional(db.from('test_sessions').update({ current_position: active.index, last_question_started_at: new Date().toISOString() }).eq('id', active.id).eq('user_id', state.user.id), 'sessions');

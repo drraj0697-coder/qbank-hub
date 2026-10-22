@@ -17,7 +17,7 @@ jobs:
         run: |
           git config user.name "sync-bot"
           git config user.email "sync-bot@users.noreply.github.com"
-          git remote add upstream https://github.com/ORIGINAL-OWNER/ORIGINAL-REPO.git
+          git remote add upstream https://github.com/amrenkhan07-pixel/qbank-hub.git
           git fetch upstream
           if git merge upstream/main --no-edit --allow-unrelated-histories; then
             [ -f custom/apply.sh ] && bash custom/apply.sh

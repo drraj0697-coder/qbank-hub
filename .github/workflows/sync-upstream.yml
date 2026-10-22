@@ -1,7 +1,8 @@
+# Save as: .github/workflows/sync-upstream.yml
 name: Sync upstream
 on:
-  schedule: [{ cron: "0 3 * * *" }]
-  workflow_dispatch:
+  schedule: [{ cron: "0 3 * * *" }]   # every day, 03:00 UTC
+  workflow_dispatch:                   # manual "Run workflow" button
 permissions:
   contents: write
   pull-requests: write
@@ -11,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - name: Merge upstream and re-apply customisations
+      - name: Merge upstream, then re-apply customisations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -19,17 +20,19 @@ jobs:
           git config user.email "sync-bot@users.noreply.github.com"
           git remote add upstream https://github.com/amrenkhan07-pixel/qbank-hub.git
           git fetch upstream
-          if git merge upstream/main --no-edit --allow-unrelated-histories; then
-            [ -f custom/apply.sh ] && bash custom/apply.sh
+          UP=$(git remote show upstream | sed -n 's/.*HEAD branch: //p')
+          if git merge "upstream/$UP" --no-edit --allow-unrelated-histories; then
+            bash custom/apply.sh
             git add -A
             git diff --cached --quiet || git commit -m "Re-apply customisations"
             git push origin HEAD:main
           else
             git merge --abort
             git checkout -b upstream-update
-            git merge upstream/main -X theirs --no-edit --allow-unrelated-histories
-            [ -f custom/apply.sh ] && bash custom/apply.sh
-            git add -A && git commit -m "Upstream update (needs review)" || true
+            git merge "upstream/$UP" -X theirs --no-edit --allow-unrelated-histories
+            bash custom/apply.sh
+            git add -A
+            git diff --cached --quiet || git commit -m "Upstream update (please review)"
             git push -f origin upstream-update
             gh pr create --fill --base main --head upstream-update || true
           fi

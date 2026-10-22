@@ -81,6 +81,18 @@ const indexPatches = [
     from: '</body>',
     to: '  <script src="./custom/session-modes.js?v=1" defer></script>\n  </body>',
   },
+  {
+    name: 'Load full-screen session CSS',
+    done: 'custom/session-fullscreen.css',
+    from: '</head>',
+    to: '  <link rel="stylesheet" href="./custom/session-fullscreen.css?v=1" />\n  </head>',
+  },
+  {
+    name: 'Load full-screen session script',
+    done: 'custom/session-fullscreen.js',
+    from: '</body>',
+    to: '  <script src="./custom/session-fullscreen.js?v=1" defer></script>\n  </body>',
+  },
 ];
 
 function run(file, patches) {

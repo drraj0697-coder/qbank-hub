@@ -1,0 +1,232 @@
+/* QBank Hub — session focus / full-screen mode
+   Loaded after the application's styles so it only affects study sessions. */
+
+.session-fullscreen-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.session-fullscreen-toggle {
+  min-height: 38px;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.session-fullscreen-toggle > span:first-child {
+  display: inline-grid;
+  width: 16px;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.question-header > .session-fullscreen-control {
+  margin-left: auto;
+}
+
+#gt-exam > .section-heading > .session-fullscreen-control {
+  margin-left: auto;
+  align-self: center;
+}
+
+.session-fullscreen-preference {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 14px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--brand-soft);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.session-fullscreen-preference input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--brand);
+}
+
+.session-fullscreen-preference b,
+.session-fullscreen-preference small {
+  display: block;
+}
+
+.session-fullscreen-preference small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.session-fullscreen-status {
+  position: fixed;
+  z-index: 100;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  max-width: min(390px, calc(100vw - 32px));
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.session-fullscreen-status.is-error {
+  border-color: var(--bad);
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+
+/* When #app is the full-screen element, navigation is intentionally hidden
+   so every usable pixel belongs to the question, tools and navigator. */
+html.qbank-session-focus,
+html.qbank-session-focus body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.qbank-session-focus #app {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--canvas);
+}
+
+html.qbank-session-focus #app > .topbar {
+  display: none;
+}
+
+html.qbank-session-focus #app > main.shell {
+  width: min(1500px, 100%);
+  max-width: none;
+  height: 100vh;
+  height: 100svh;
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) clamp(16px, 2.3vw, 34px) max(20px, env(safe-area-inset-bottom));
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+html.qbank-session-focus .question-header {
+  position: sticky;
+  z-index: 20;
+  top: calc(-1 * max(16px, env(safe-area-inset-top)));
+  margin: calc(-1 * max(16px, env(safe-area-inset-top))) 0 15px;
+  padding: max(12px, env(safe-area-inset-top)) 0 11px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+html.qbank-session-focus .question-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+  gap: clamp(14px, 1.8vw, 26px);
+}
+
+html.qbank-session-focus .question-card {
+  min-height: calc(100svh - 120px);
+}
+
+html.qbank-session-focus .question-sidebar {
+  position: sticky;
+  top: 94px;
+  max-height: calc(100svh - 112px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+html.qbank-session-focus .question-sidebar .palette {
+  max-height: min(44svh, 430px);
+}
+
+html.qbank-session-focus #gt-exam {
+  width: min(1250px, 100%);
+  min-height: calc(100svh - 36px);
+  margin: 0 auto;
+}
+
+html.qbank-session-focus #gt-exam > .section-heading {
+  position: sticky;
+  z-index: 20;
+  top: calc(-1 * max(16px, env(safe-area-inset-top)));
+  margin: calc(-1 * max(16px, env(safe-area-inset-top))) 0 16px;
+  padding: max(12px, env(safe-area-inset-top)) 0 11px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+html.qbank-session-focus .question-actions {
+  position: sticky;
+  z-index: 18;
+  bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
+  margin-bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
+  padding-bottom: max(13px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  box-shadow: 0 -8px 22px rgb(44 69 91 / 8%);
+}
+
+@media (max-width: 760px) {
+  .question-header > .session-fullscreen-control {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .session-fullscreen-toggle {
+    width: 100%;
+  }
+
+  #gt-exam > .section-heading > .session-fullscreen-control {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  html.qbank-session-focus #app > main.shell {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  html.qbank-session-focus .question-header {
+    top: calc(-1 * max(12px, env(safe-area-inset-top)));
+    margin-top: calc(-1 * max(12px, env(safe-area-inset-top)));
+  }
+
+  html.qbank-session-focus .question-layout {
+    grid-template-columns: 1fr;
+  }
+
+  html.qbank-session-focus .question-sidebar {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  html.qbank-session-focus .question-sidebar .palette {
+    max-height: 230px;
+  }
+
+  html.qbank-session-focus .question-card {
+    min-height: auto;
+  }
+
+  html.qbank-session-focus .question-actions {
+    right: -15px;
+    left: -15px;
+  }
+
+  html.qbank-session-focus #gt-exam > .section-heading {
+    top: calc(-1 * max(12px, env(safe-area-inset-top)));
+    margin-top: calc(-1 * max(12px, env(safe-area-inset-top)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.qbank-session-focus #app > main.shell { scroll-behavior: auto; }
+}

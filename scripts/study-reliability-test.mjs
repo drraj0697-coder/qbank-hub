@@ -17,7 +17,7 @@ const fresh=()=>{status='in_progress';calls=[];vm.runInContext('answerWrites.cle
 fresh();await context.saveActiveAnswer('a');await context.saveActiveAnswer('a');assert.equal(calls.filter(c=>c.table==='test_answers').length,1,'identical answer write deduplicated');
 state.active.answers.a.selected_option='B';await context.saveActiveAnswer('a');assert.equal(calls.filter(c=>c.table==='test_answers').length,2,'changed answer persists');
 fresh();await context.navigateActive(1);assert.equal(state.active.index,1);assert(!calls.some(c=>c.name==='qbank_record_attempt_v2'),'timed-test navigation must not commit provisional attempt');
-fresh();await Promise.all([context.submitActive(),context.submitActive()]);assert.equal(calls.filter(c=>c.name==='submit_test_session').length,1);assert.equal(status,'completed');assert.equal(calls.filter(c=>c.name==='qbank_record_attempt_v2').length,2);assert.equal(results,1);
+fresh();await Promise.all([context.submitActive(),context.submitActive()]);assert.equal(calls.filter(c=>c.name==='submit_test_session').length,1);assert.equal(status,'completed');assert.equal(calls.filter(c=>c.name==='qbank_record_attempt_v2').length,0);assert.equal(results,1);
 const submitted=calls.findIndex(c=>c.name==='submit_test_session');assert(!calls.slice(submitted+1).some(c=>c.table==='test_answers'),'no answer writes after submit');
 const original=JSON.stringify(state.active.answers),questions=state.active.questions;calls=[];context.startCompletedReview('incorrect');assert.equal(state.active.index,1);assert.strictEqual(state.active.questions,questions);await context.navigateActive(2);await context.saveActiveAnswer('b');await context.ensureAttemptRecorded(questions[1],state.active.answers.b);assert.equal(calls.length,0,'review has no persistence or attempt side effects');assert.equal(JSON.stringify(state.active.answers),original);
 context.startCompletedReview('unattempted');assert.equal(state.active.index,2);context.startCompletedReview('correct');assert.equal(state.active.index,0);context.startCompletedReview('all');assert.equal(state.active.questions.length,3);
@@ -28,3 +28,20 @@ state.active.bookmarks=new Set();state.active.marked=new Set();state.active.lear
 vm.runInContext(extract('async function toggleBookmark(','async function updateAnswerMetadata('),context);
 await context.toggleBookmark();await context.toggleMark();assert(state.active.bookmarks.has('a'));assert(state.active.marked.has('a'));assert(calls.some(c=>c.name==='qbank_set_bookmark'));assert(calls.some(c=>c.table==='user_question_state'));assert(!calls.some(c=>c.table==='test_answers'));
 console.log('PASS: completed-review bookmark/mark updates personal state only');
+// Practice, Smart Recall and Active Recall continue through their canonical event RPCs.
+for(const [kind,preset,expected] of [['practice','qbank','qbank_record_attempt_v2'],['recall','smart-recall','qbank_record_attempt_v2'],['recall','active-recall-v2','qbank_active_recall_record']]){
+ fresh();state.active.kind=kind;state.active.preset=preset;
+ await context.ensureAttemptRecorded(state.active.questions[0],state.active.answers.a);
+ const eventCalls=calls.filter(c=>c.name===expected);assert.equal(eventCalls.length,1);
+ assert.equal(eventCalls[0].args.p_question_id,'a');
+ await context.ensureAttemptRecorded(state.active.questions[0],state.active.answers.a);
+ assert.equal(calls.filter(c=>c.name===expected).length,1,'recorded outcomes never double-write');
+}
+fresh();state.active.kind='practice';const oldRpc=context.db.rpc;context.db.rpc=async(name,args)=>{calls.push({name,args});return {error:new Error('RPC missing')}};
+await context.recordAttempt(state.active.questions[0],state.active.answers.a);await context.recordAttempt(state.active.questions[0],state.active.answers.a);
+const retries=calls.filter(c=>c.name==='qbank_record_attempt_v2');assert.equal(retries.length,2);assert.equal(retries[0].args.p_event_id,retries[1].args.p_event_id);assert(!calls.some(c=>c.table==='question_attempts'),'no non-idempotent fallback');context.db.rpc=oldRpc;
+console.log('PASS: Practice/Smart Recall/Active Recall shared canonical IDs, saved-event idempotency and stable retry IDs');
+fresh();state.active.kind='practice';context.db.rpc=async()=>({error:new Error('offline')});
+await assert.rejects(context.ensureAttemptRecorded(state.active.questions[0],state.active.answers.a),/sync is pending/);
+assert.equal(state.active.answers.a.attemptRecorded,undefined);context.db.rpc=oldRpc;
+console.log('PASS: unsynced outcome prevents navigation/completion until retry succeeds');

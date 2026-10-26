@@ -71,3 +71,9 @@
 .result-grid .metric b { font-size: clamp(20px, 2.2vw, 28px); }
 .result-actions { padding: 14px; margin-top: 14px; }
 @media(max-width:600px) { .pyq-test-row { flex-wrap: wrap; } .pyq-test-row > div { min-width: 0; } .result-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+/* Small optional practice shortcuts; no full cards or extra Home history. */
+.home-review-tiles{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.home-review-tiles button{display:flex;align-items:center;gap:8px;font-size:12px;padding:8px 10px;min-height:36px}
+.home-review-tiles small{font-size:11px;opacity:.75}
+.question-history{display:block;min-height:1.3em;font-size:12px;margin:6px 0}
